@@ -1,17 +1,22 @@
 ---
 title: "Analysis of Tissue Specimen for the Identification of Malignant Tumors"
 output:
-  pdf_document: default
+  pdf_document:
+    toc: true
   html_notebook: default
 ---
 
-##Predictors
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(results = "hold", echo = FALSE, warning = FALSE, message = FALSE, tidy = TRUE)
+```
 
-###Background
+#Predictors
+
+##Background
 
 Modern diagnosis of breast cancer involves histologic examination of tissue specimen from the suspicious mass. Traditionally, a pathologist would examine a breast biopsy and compose a feature pattern for a particular case and then based on that pattern, associate a probability of malignancy (and a possible diagnosis of breast cancer). Attempts are currently being made to automate this process, using imaging equipment and machine learning (Maglogiannis & Zafiropoulos, 2004).
 
-###Origin of Data
+##Origin of Data
 Part of the histologic examination is examination of cytologic features which are features of individual cells in the breast biopsy. Three important cytologic features are cell nuclear size, nuclear membrane irregularity, and nuclear chromatin. 569 tissue specimens (from breast biopsies) were collected (Wolberg, 1995). Image analysis looked at 10-20 cells per specimen and classified each on: radius, texture, perimeter, area, smoothness, compactness, concavity, concave points, symmetry, and fractal dimension. These variables are representations of nuclear size, nuclear membrane irregularity, and nuclear chromatin. The final measurement was an average of each sample’s 10-20 cells.
 
 ```{r readin, include = FALSE}
@@ -23,18 +28,18 @@ names(cancer_raw)[3:12]<-c("radius","texture","perimeter","area","smoothness","c
 ```
 
 
-##Imputation
+#Imputation
 
 Missing data is a serious issue. It can bias parameter estimation, weaken generalizability, and decrease statistical power (Dong & Peng, 2013). Additionally, the techniques used in this section (PCA, Classification, etc.) are not naturally equipped to deal with missing data so imputation is a necessary step to pre-processing the data.
 
-###Missing Data Mechanism
+##Missing Data Mechanism
 Imputation technique is conditional on the missing data mechanism at work in our dataset. If the data are missing completely at random (MCAR), then most imputation techniques won’t violate the validity of any inferences we may make. Jamshidian and Jalal (2010) recommend two tests of the null hypothesis that data are MCAR: a normal theory test and a non-parametric test. Testing Mardia’s multivariate skew coefficients, we found that the data are not multivariate normal, p<0.05. Applying the non-parametric MCAR test, we cannot reject the null hypothesis that our data are MCAR, p>0.05.
 
-###Non-Parameteric Imputation
+##Non-Parameteric Imputation
 Another important factor is the prevalence of missingness – this also determines what fix to apply. There is one pattern of missingness (Compactness, Concavity, and Concave Points) in the data for two observations: clients with IDs 843786 and 844359. Since the proportion is so low (0.4%), the go-to method would usually be list-wise deletion (Izenman, 2013). Additionally, since the proportion is so low, if we elect for some form of imputation, the difference between list-wise deletion and between different forms of imputation will be minimal in terms of analyses we run. In our case, the choice of how we deal with the missing data is very low-impact/risk.
 Simple imputation has the easiest implementation but it may bias standard error estimates to make our models look more precise than they actually are (Izenman, 2013). Thus I elected to use the distribution-free imputation method of Srivastava and Dolatabadi (2009; implemented using the MissMech R package) for the two cases with missing data.
 
-```{r}
+```{r missingness, include = FALSE}
 ###2B. Missingness and Imputation
 #check normality
 mdtest = mardiaTest(cancer_raw[-c(6,7),-c(1,2)],qqplot=TRUE)
@@ -66,9 +71,9 @@ cancer<-TestMCARNormality(data=cancer_raw[,-c(1,2)],del.lesscases=1,imputation.m
 
 
 
-##Dimension Reduction through PCA
+#Dimension Reduction through PCA
 
-###Are the predictors related?
+##Are the predictors related?
 
 Let’s investigate the relationship between the predictors. Below is a correlogram, a visualization of the correlation matrix of the predictors. We can see strong positive relationships between the variables including a near perfect correlation between perimeter and area ($r=0.99$). 
 
@@ -85,18 +90,18 @@ knitr::kable(smc_data)
 #multicollinearity looks like
 
 #condition number
-kappa(cor(cancer[,-c(1,2)]))
+#kappa(cor(cancer[,-c(1,2)]))
 ```
 
 Further, the squared multiple correlations (SMCs; tabulated above) between the predictors are incredibly high. For example, 98.7% of the variance in Perimeter is accounted for by the other predictors; four other predictors have SMC’s above 90% There is a lot of redundancy in these predictors. A lot of the variance that exists in the Perimeter dimension also exists in the Area dimension also exists in the Concave Points dimension and so on. We don’t need to keep a full, 8-dimensional predictor space because the data don’t occupy the whole space. Geometrically, there may be an opportunity to reduce the predictor space in such a way as to preserve much of the original variance of the predictors.
 
 
-###Is PCA necessary?
+##Is PCA necessary?
 From a statistical point-of-view we can take two stances. On the one hand, high inter-predictor associations often result in estimation problems (which may propagate to interpretation problems) so we may want to perform PCA. The phenomenon of such high correlation between predictors is multicollinearity, which interferes with matrix inversion and inflates parameter standard errors. In addition to the high SMCs, the correlation matrix of the predictors has a condition number of $\kappa(R)$=446, indicating ill-conditioning and multicollinearity. The inflated standard errors ruin parameter interpretations as we can’t tell the contribution of individual predictors. On the other hand, as long as we can get our matrix to invert and we don’t care about our high standard errors (essentially making our method a black box), we may not want to perform a PCA as preprocessing to our main analysis.
 From a practical point-of-view we don’t really have a large number of predictors to project to a smaller subspace and even if we were to do so, does it make sense to interpret composite indices of these predictors? For example, what does it mean to have a weighted difference between smoothness and area, and perimeter and fractal dimension? The typical application of PCA involves many, many predictors whose variance can be effectively reduced down to only a handful of linear combinations. In this case with small $p$, perhaps a better solution would be some penalized glm like a lasso which would shrink some collinear predictors to zero.
 
 
-###Should we standardize for PCA?
+##Should we standardize for PCA?
 PCA of unstandardized variables (i.e. PCA of $\Sigma$) is not equivalent to PCA of standardized variables (i.e. PCA of $R$). In fact, the principal components derived in one situation are not a simple function of those derived in the other. When there is a disparity in the scales of the variables, the variables with larger variances dominate (have larger coefficients for) the principal components. It is apparent from the various measures of dispersion in the table below that the eight predictors have wildly different scales – to be exact Area (and to a lesser extent, Perimeter) have much larger variances and so would dominate the PCA. Therefore, the PCA should be performed on $R$.
 
 ```{r stdPCS}
@@ -137,7 +142,7 @@ knitr::kable(loading_tbl)
 
 
 
-###Perform PCA
+##Perform PCA
 
 To select the optimal number of principal components we will use Horn’s Parallel Analysis and the amount of variation explained:
 
@@ -188,7 +193,7 @@ ggplot(melt(load[8:1,]), aes(Var1, abs(value), fill=value)) +
 
 Our first principal component is a (nearly equal) weighted mean of all predictors; Fractal Dimension has the least weight. The second principal component is a weighted difference between Fractal Dimension, Symmetry, and Smoothness; and Perimeter and Area.
 
-###PCA and Classification
+##PCA and Classification
 
 Can we see separation between the two diagnoses in our reduced subspace? In other words, is the 14% loss in fidelity of predictor variance worth it in terms of our ultimate goal of classification? The biplot below answers the question. The first principal component and the 59.2% variance it accounts for actually does a decent job of separating the diagnoses; incorporate the second principal component (86% cumulate variance) and the separation is even better. The question now is how much better this separation is than if we had used the original data. This will be answered in the next section.
 
@@ -223,7 +228,7 @@ ggbiplot(cancer.pca, obs.scale = 1, var.scale = 1,
 
 
 
-##Classification
+#Classification
 
 
 Now we want to apply a selection of classifiers to the data to classify cases as benign vs. malignant. Building on our PCA, we must ask, can we perform classification on the reduced space formed by the first two principal components? In other words, is the variance we lost when performing data reduction very important in the prediction of diagnosis? If it is, we will see a large difference in classification metrics; if it isn’t, the difference should be minimal. The advantage of a 2-component PCA is that we can visually assess if a classifier is performing well by looking at the decision boundary superimposed on a scatterplot of the first two principal components. Note that using PCA to deal with multicollinearity isn’t really an advantage here because in this classification context, we don’t care about the effects of multicollinearity, only about prediction precision. We may not be able to figure out how important each predictor is in terms of the prediction, but the prediction itself should not be affected.
@@ -243,12 +248,12 @@ train.pc <-pcscores[train_index,]
 test.pc <-pcscores[-train_index,]
 ```
 
-###Logistic Regression
+##Logistic Regression
 As mentioned above, we don’t bother with subset selection as our focus is on prediction only. We fit all predictors. Logistic Regression fit very well with an overall classification rate of 93.3%, a sensitivity of 89.3% and a specificity of 96.7%. Individuals with benign masses were nearly classified perfectly. About 1 out of every 10 individuals with malignant were misdiagnosed. 
 Sensitivity takes high precedence since the error of making a negative diagnosis when the client is positive is worse than making a positive diagnosis when the client is negative. It is better to administer cancer medication to someone without cancer (even if the medication has terrible side effects) than to give someone a clean bill of health and let someone slip past the point of no return.
 
 
-###Logistic Regression (Reduced Space)
+##Logistic Regression (Reduced Space)
 With the reduced information, logistic regression performance fell across overall classification rate (1% drop), sensitivity (~4% drop), and specificity (1.6% drop). While this isn’t a big deal in a statistical sense, from a practical sense any increase in error can come at the cost of human lives.
 
 ```{R LR}
@@ -260,11 +265,13 @@ glm.pred[glm.probs >0.5]= "M"
 
 #test confusion matrix
 tab<-table(actual=test[,1],glm.pred)
-sum(diag(tab))/sum(tab)
+lr.acc <- sum(diag(tab))/sum(tab)
+lr.sen <- tab[2,2]/sum(tab[2,])
+lr.spec <- tab[1,1]/sum(tab[1,])
 #ROC
-lr.roccurve<-roc(test[,1]~glm.probs)
+lr.roccurve <- roc(test[,1]~glm.probs)
 #AUC
-auc(lr.roccurve)
+lr.auc <- auc(lr.roccurve)
 
 
 ###LR for reduced space
@@ -275,23 +282,20 @@ glm.pred[glm.probs >0.5]= "M"
 
 #test confusion matrix
 tab<-table(actual=test.pc[,3],glm.pred)
-sum(diag(tab))/sum(tab)
+lrred.acc <- sum(diag(tab))/sum(tab)
+lrred.sen <- tab[2,2]/sum(tab[2,])
+lrred.spec <- tab[1,1]/sum(tab[1,])
 #ROC
-lr.red.roccurve<-roc(test.pc[,3]~glm.probs)
+lrred.roccurve <- roc(test.pc[,3]~glm.probs)
 #AUC
-auc(lr.red.roccurve)
-
-
-par(mfrow=c(1,2))
-plot(lr.roccurve,ylim=c(0,1),main="LR ROC Curve")
-plot(lr.red.roccurve,ylim=c(0,1),main="LR Reduced ROC Curve")
+lrred.auc <- auc(lrred.roccurve)
 ```
 
-###Linear Discriminant Analysis
+##Linear Discriminant Analysis
 LDA performed better than logistic regression overall (94.7% overall classification rate). It outperformed logistic regression in specificity (99.4%) but at the cost of worse sensitivity (86.3%) which is the error rate that we care about. Therefore logistic regression is still the superior classifier.
 
 
-###Linear Discriminant Analysis (Reduced Space)
+##Linear Discriminant Analysis (Reduced Space)
 Like logistic regression, LDA on the reduced data decreased performance across the board; unlike logistic regression, the decrease was marked. This is very unacceptable from a practical standpoint.
 
 ```{R LDA}
@@ -301,12 +305,14 @@ lda.pred = predict(lda.fit, test)
 lda.class =lda.pred$class
 
 #test confusion matrix
-tab<-table(actual=test[,1],lda.class)
-sum(diag(tab))/sum(tab)
+tab <- table(actual=test[,1],lda.class)
+lda.acc <- sum(diag(tab))/sum(tab)
+lda.sen <- tab[2,2]/sum(tab[2,])
+lda.spec <- tab[1,1]/sum(tab[1,])
 #ROC
-lda.roccurve<-roc(test[,1]~lda.pred$posterior[,2])
+lda.roccurve <- roc(test[,1]~lda.pred$posterior[,2])
 #AUC
-auc(lda.roccurve)
+lda.auc <- auc(lda.roccurve)
 
 
 ###LDA reduced
@@ -315,26 +321,21 @@ lda.pred = predict(lda.fit, test.pc)
 lda.class =lda.pred$class
 
 #test confusion matrix
-tab<-table(actual=test.pc[,3],lda.class)
-sum(diag(tab))/sum(tab)
-tab
+tab <- table(actual=test.pc[,3],lda.class)
+ldared.acc <- sum(diag(tab))/sum(tab)
+ldared.sen <- tab[2,2]/sum(tab[2,])
+ldared.spec <- tab[1,1]/sum(tab[1,])
 #ROC
-lda.red.roccurve<-roc(test.pc[,3]~lda.pred$posterior[,2])
+ldared.roccurve<-roc(test.pc[,3]~lda.pred$posterior[,2])
 #AUC
-auc(lda.roccurve)
-
-
-par(mfrow=c(1,2))
-plot(lda.roccurve,ylim=c(0,1),main="LDA ROC Curve")
-plot(lda.red.roccurve,ylim=c(0,1),main="LDA Reduced ROC Curve")
-
+ldared.auc <- auc(ldared.roccurve)
 ```
 
-###Quadratic Discriminant Analysis
+##Quadratic Discriminant Analysis
 QDA performed the same as LDA in terms of sensitivity (86.3%) but was 2.7% worse in terms of specificity. So far it is the worst classifier of the three. 
 
 
-###Quadratic Discriminant Analysis (Reduced Space)
+##Quadratic Discriminant Analysis (Reduced Space)
 Curiously, QDA on the reduced space saw a huge decrease in sensitivity (drop of 4.4%) and a small increase in specificity (plus 1.6%). Overall, it’s still unimpressive.
 
 ```{r QDA}
@@ -345,14 +346,13 @@ qda.class =qda.pred$class
 
 #test confusion matrix
 tab<-table(actual=test[,1],qda.class)
-sum(diag(tab))/sum(tab)
+qda.acc = sum(diag(tab))/sum(tab)
+qda.sen <- tab[2,2]/sum(tab[2,])
+qda.spec <- tab[1,1]/sum(tab[1,])
 #ROC
 qda.roccurve<-roc(test[,1]~qda.pred$posterior[,2])
 #AUC
-auc(qda.roccurve)
-
-
-
+qda.auc = auc(qda.roccurve)
 
 ##QDA reduced
 qda.fit=qda(diagnosis~., data=train.pc ) 
@@ -360,19 +360,16 @@ qda.pred = predict(qda.fit, test.pc)
 qda.class =qda.pred$class
 #test confusion matrix
 tab<-table(actual=test.pc[,3],qda.class)
-sum(diag(tab))/sum(tab)
+qdared.acc = sum(diag(tab))/sum(tab)
+qdared.sen <- tab[2,2]/sum(tab[2,])
+qdared.spec <- tab[1,1]/sum(tab[1,])
 #ROC
-qda.red.roccurve<-roc(test.pc[,3]~qda.pred$posterior[,2])
+qdared.roccurve <- roc(test.pc[,3]~qda.pred$posterior[,2])
 #AUC
-auc(qda.roccurve)
-
-
-par(mfrow=c(1,2))
-plot(qda.roccurve,ylim=c(0,1),main="QDA ROC Curve")
-plot(qda.red.roccurve,ylim=c(0,1),main="QDA Reduced ROC Curve")
+qdared.auc = auc(qdared.roccurve)
 ```
 
-###K-Nearest-Neighbors
+##K-Nearest-Neighbors
 To pick the optimal K we tune it with the total misclassification rate (TCR), sensitivity, and specificity:
 
 ```{r knn}
@@ -398,6 +395,11 @@ for(i in 1:20){
   spec[i]<-1-tab[2,1]/sum(tab[,1]) #specificity - true negative
 }
 
+knn.acc = mcr[4]
+knn.sen = sens[4]
+knn.spec = spec[4]
+
+
 knn_plot = data.frame(
   k = rep(1:20,3),
   measure = c(mcr,sens,spec),
@@ -412,6 +414,7 @@ ggplot(data=knn_plot, aes(x=k,y=measure,colour=Metric)) +
 
 Total classification rate is highest for k=14. The k with best tradeoff between optimum sensitivity and total classification rate is k=3. So, we will use the 3-Nearest-Neighbors approach when comparing to other classifiers. K-Nearest-Neighbors appears to be the worst so far.
 
+##K-Nearest-Neighbors (Reduced Space)
 
 ```{r knn_reduce}
 #KNN for reduced space
@@ -429,6 +432,10 @@ for(i in 1:20){
 knn_tbl = as.data.frame(round(cbind(mcr,sens,spec),3))
 row.names(knn_tbl) = 1:20
 knitr::kable(knn_tbl,row.names=TRUE)
+knnred.acc = mcr[4]
+knnred.sen = sens[4]
+knnred.spec = spec[4]
+
 
 knn_plot = data.frame(
   k = rep(1:20,3),
@@ -442,17 +449,40 @@ ggplot(data=knn_plot, aes(x=k,y=measure,colour=Metric)) +
 ```
 
 Prioritizing sensitivity, the optimal k for the reduced space is k=4. What’s interesting here is that classification for KNN in the reduced space is better in every way than it is for the full space. Why should this be if we lost information (variation) when we reduced dimensions? My guess is that the nature of this algorithm is to classify based on neighbors and with reduced dimensions, there is less noise in the distances between neighbors. An observation may have been close to another observation with a different diagnosis in the full space but once the space was reduced, the new projected observation is now closer to a projected observation with the same diagnosis.
-Compare Classifiers
+
+
+##Compare Classifiers
 To compare the performance of classifiers we will use five measures. The first is the misclassification rate which is simply, “when did the classifier get it right?” Out of all of the cases, how many cases were correctly diagnosed as benign or malignant? Sensitivity is our true positive rate – out of those cases with malignant tumors, how many were correctly diagnosed as malignant? Specificity is our true negative rate – out of those cases with benign tumors, how many were correctly diagnosed as benign? Finally, we look at the ROC curve for each. The ROC curve tells us the relationship between sensitivity and specificity for a classifier as we vary the threshold. For example, for a poor classifier, decreasing the threshold of classification to increase the sensitivity will tank the specificity. A great classifier will have a threshold at which both specificity and sensitivity are maximized at a high value (close to 1). The area under the ROC curve is a measure of the discrimination power of the test. It is bounded between 1 and 0.5 with the former being a perfect classifier and the latter being random chance (a coin flip for a diagnosis). Note that KNN in its original form is a non-probabilistic classifier so it does not have ROC curve or corresponding AUC.
 
 ```{r perfmetrics}
 #performancemetrics
+pmetrics = data.frame(
+  "Accuracy" = paste(round(c(lr.acc, lrred.acc, lda.acc, ldared.acc, qda.acc, qdared.acc, knn.acc, knnred.acc),3)*100,"%",sep=""),
+  "Sensitivity" = paste(round(c(lr.sen, lrred.sen, lda.sen, ldared.sen, qda.sen, qdared.sen, knn.sen, knnred.sen),3)*100,"%",sep=""),
+  "Specificity" = paste(round(c(lr.spec, lrred.spec, lda.spec, ldared.spec, qda.spec, qdared.spec, knn.spec, knnred.spec),3)*100,"%",sep=""),
+  "AUC" = c(paste(round(c(lr.auc, lrred.auc, lda.auc, ldared.auc, qda.auc, qdared.auc),3)*100,"%",sep=""),NA,NA),
+  row.names = c("LR", "LR reduced", "LDA", "LDA reduced", "QDA", "QDA reduced", "KNN", "KNN reduced")
+)
+knitr::kable(pmetrics)
+
 ```
 
 In terms of overall classification, LDA is the best, correctly diagnosing nearly 19 out of 20 patients. It also has the highest specificity, with nearly perfect classification of patients with benign tumors. The problem is its sensitivity is a full 3 percentage points lower than the two classifiers with the highest sensitivity: KNN (reduced) and logistic regression. KNN is a surprise because when applied to the original data it is easily the worst classifier. However, when applied to the reduced data, it’s sensitivity improves markedly. Unfortunately it doesn’t have a ROC curve because it’s a nonprobabilistic classifier. Logistic regression is the best overall performer (besides LDA) with high sensitivity, decent specificity, and large AUC. If specificity was important, LDA would be the top classifier; but in this context, sensitivity is mostly what matters and that makes Logistic Regression the best classifier.
 
-```{r LRcurves}
-#LRCurves
+```{r LRcurves, fig.width = 6, fig.height = 2, results='hide', fig.keep='all'}
+par(mfrow=c(1,2))
+
+#LR
+plot(lr.roccurve,ylim=c(0,1),main="LR ROC Curve")
+plot(lrred.roccurve,ylim=c(0,1),main="LR Reduced ROC Curve")
+
+#LDA
+plot(lda.roccurve,ylim=c(0,1),main="LDA ROC Curve")
+plot(ldared.roccurve,ylim=c(0,1),main="LDA Reduced ROC Curve")
+
+#QDA
+plot(qda.roccurve,ylim=c(0,1),main="QDA ROC Curve")
+plot(qdared.roccurve,ylim=c(0,1),main="QDA Reduced ROC Curve")
 ```
 
 
@@ -478,9 +508,18 @@ In terms of overall classification, LDA is the best, correctly diagnosing nearly
 
 
 
-##Cluster Analysis
+#Cluster Analysis
 
-```{r eval=TRUE}
+##Agglomerative Hierarchical Clustering (AHC)
+
+There are a number of different linkage methods and the process of cluster analysis necessitates application of multiple linkage methods to the data and to compare results. We apply single linkage, complete linkage, average linkage, centroid linkage, and Ward’s linkage and examine two- and three-cluster solutions using three graphical methods: dendrograms, cluster plots, and silhouette plots.
+A cluster plot plots the clustering solution over the first two principal components. It is very similar to the PCA biplot from earlier. We can evaluate the performance of a linkage method by looking at the size, separation, and shape of clusters (while keeping in mind that this is a cluster solution projected into a reduced space, necessarily losing some variance).
+A silhouette plot allows interpretation and validation of consistency within clusters of data (Rousseuw, 1987). It displays, for each observation, a silhouette value which is a measure of cohesion (distance to all other points in cluster) vs. separation (distance to points in closest other cluster). The value is bounded between -1 (high separation) and 1 (high cohesion). Silhouette values are grouped into the corresponding clusters allowing you to evaluate how well certain clusters are performing. If a cluster has a large number of very negative silhouette values, the cluster solution is poor.
+
+
+##Single Linkage
+
+```{r single, fig.height = 4}
 ###5. Cluster Analysis------
 
 #euclidean
@@ -498,8 +537,13 @@ clusplot(cancer, hc.s.2,color=TRUE, shade=TRUE, lines=0,main="Cluster Plot: AHC 
 clusplot(cancer, hc.s.3,color=TRUE, shade=TRUE, lines=0,main="Cluster Plot: AHC Single, 3 Clusters")
 plot(silhouette(hc.s.2,d),main="Silhouette Plot: AHC Single, 2 Clusters")
 plot(silhouette(hc.s.3,d),main="Silhouette Plot: AHC Single, 3 Clusters")
+```
 
+The dendrogram for single linkage doesn’t look very good. The first cluster is two observations versus the rest. The third and fourth clusters split off individual observations from the majority cluster. The clusters are tiny! Obviously in a diagnosis application this is useless. Examining the cluster plot on the first two principal components, we see a nice spatial representation of what the dendrogram was telling us – the two and three cluster solutions just pick out a couple outlying observations as their own cluster. The silhouette plots aren’t much use here because of the uneven size of the clusters.
 
+##Complete Linkage
+
+```{r complete, fig.height = 4}
 #complete-linkage
 hc.comp <- hclust(d,method="complete")
 plot(hc.comp,main="Dendrogram: Complete",xlab="Euclidean Distance")
@@ -510,8 +554,13 @@ clusplot(cancer, hc.comp.2,color=TRUE, shade=TRUE, lines=0,main="Cluster Plot: A
 clusplot(cancer, hc.comp.3,color=TRUE, shade=TRUE, lines=0,main="Cluster Plot: AHC Complete, 3 Clusters")
 plot(silhouette(hc.comp.2,d),main="Silhouette Plot: AHC Complete, 2 Clusters")
 plot(silhouette(hc.comp.3,d),main="Silhouette Plot: AHC Complete, 3 Clusters")
+```
 
+The dendrogram looks a lot better here; the first and second split produce large clusters. When we look at the cluster plot there is a nice separation between the clusters in the two-cluster solution (just like the true diagnoses). The poor silhouette values of the larger cluster are reflective of the overlap between the two clusters (i.e. the two diagnoses).
 
+##Average Linkage
+
+```{r average, fig.height = 4}
 #average-linkage
 hc.a <- hclust(d,method="average")
 plot(hc.a,main="Dendrogram: Average",xlab="Euclidean Distance")
@@ -522,8 +571,14 @@ clusplot(cancer, hc.a.2,color=TRUE, shade=TRUE, lines=0,main="Cluster Plot: AHC 
 clusplot(cancer, hc.a.3,color=TRUE, shade=TRUE, lines=0,main="Cluster Plot: AHC Average, 3 Clusters")
 plot(silhouette(hc.a.2,d),main="Silhouette Plot: AHC Average, 2 Clusters")
 plot(silhouette(hc.a.3,d),main="Silhouette Plot: AHC Average, 3 Clusters")
+```
+
+Reminiscent of single linkage, the two-cluster solution creates a tiny cluster on the first split. Interestingly, the next split recovers what looks like the two-cluster complete linkage solution; it’s too bad that the agglomerative algorithm has already created an erroneous small cluster. The silhouette plots look fine but that’s because although the cluster shapes and sizes are wrong, membership within the clusters looks good.
 
 
+##AHC with Centroid Linkage
+
+```{r centroid, fig.height = 4}
 #centroid-linkage
 hc.cent <- hclust(d,method="centroid")
 plot(hc.cent,main="Dendrogram: Centroid",xlab="Euclidean Distance")
@@ -535,10 +590,15 @@ clusplot(cancer, hc.cent.3,color=TRUE, shade=TRUE, lines=0,main="Cluster Plot: A
 plot(silhouette(hc.cent.2,d),main="Silhouette Plot: AHC Centroid, 2 Clusters")
 plot(silhouette(hc.cent.3,d),main="Silhouette Plot: AHC Centroid, 3 Clusters")
 
+```
 
-#Ward-linkage
+Results are extremely similar to the average linkage method…poor.
+
+##AHC Ward's Linkage
+
+```{r ward, fig.height = 4}
 hc.w <- hclust(d,method="ward.D2")
-plot(hc.w,main="Dendrogram: Centroid",xlab="Euclidean Distance")
+plot(hc.w,main="Dendrogram: Ward's",xlab="Euclidean Distance")
 
 hc.w.2 <- cutree(hc.w, 2)
 hc.w.3 <- cutree(hc.w, 3)
@@ -546,10 +606,19 @@ clusplot(cancer, hc.w.2,color=TRUE, shade=TRUE, lines=0,main="Cluster Plot: AHC 
 clusplot(cancer, hc.w.3,color=TRUE, shade=TRUE, lines=0,main="Cluster Plot: AHC Ward's, 3 Clusters")
 plot(silhouette(hc.w.2,d),main="Silhouette Plot: AHC Ward's, 2 Clusters")
 plot(silhouette(hc.w.3,d),main="Silhouette Plot: AHC Ward's, 3 Clusters")
+```
+
+Ward’s performs just like Complete Linkage. It separates two large clusters which look like our two diagnoses.  Interestingly, the 3-cluster solution separates out the “boundary group” consisting of individuals with cytologic features that could just as easily lead to a benign diagnosis than a malignant one. This makes the silhouette plot for the 3-cluster solution look a lot better than that of the 2-cluster solution.
 
 
 
+##Determine the Optimal Number of Clusters
+Using Ward’s Linkage (the superior method), we will utilize the C-statistic and the d-statistic to determine the optimal number of clusters (K).
 
+$$C = \frac{\mathrm{tr}(B)/(K-1)}{\mathrm{tr}(W)/(n-K)}$$
+$$d = K^2|W|$$
+
+```{r nclusters}
 #Pick Optimal # of Clusters
 n <- nrow(cancer)
 Cstat <- numeric(7)
@@ -569,13 +638,27 @@ for(k in 2:7){
   Cstat[k] <- C
   dstat[k] <- d
 }
+to_print = data.frame(
+  C = round(Cstat,2),
+  d = round(dstat,2),
+  row.names = 1:7
+)
+knitr::kable(to_print)
+```
 
-Cstat
-dstat
 
+Based on both statistics, the two-cluster solution is optimal. This makes sense given what we know about the diagnoses! A visual method of determining the optimal number of clusters is the clustergram (Schonlau, 2002) which utilizes K-Means clustering:
+
+##K-Means clustering
+
+```{r clustergram}
 #Using K-means and the Clustergram to validate optimal # of clusters
 par(mfrow=c(1,1))
 
 source("https://raw.githubusercontent.com/talgalili/R-code-snippets/master/clustergram.r")
 clustergram(cancer,1:7,line.width=.3)
 ```
+
+
+The clustergram shows that using k-means for a two-cluster solution appears to produce a separation of groups (in terms of mean separation and cluster size) similar to Complete linkage and Ward’s linkage. A further split results in a boundary group (again like Complete and Ward) that pulls a little from the benign group and the malignant group. The splits begin to make less and less sense after this. The clustergram suggests that a 2- or 3-cluster solution is best. Combined with our C- and d-statistics, a two cluster solution is optimal.
+
